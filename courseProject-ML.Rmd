@@ -1,0 +1,115 @@
+---
+title: "Practical Machine Learning Project"
+author: "Rubén Orta Magán"
+date: "05/21/2015"
+output: html_document
+---
+# Summary
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Data 
+
+The training data for this project are available here: 
+  
+  https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+  
+  https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+## Objetives
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+# Data Processing
+
+If we look thought the data provided for the analysis we can see that it includes a lot of cells with information not available. We transform this NA data when we read the files.
+
+```{r}
+library(rpart) 
+library(rpart.plot) 
+library(randomForest)
+library(caret)
+
+set.seed(1234)
+trainingFileUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testingFileUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainingData <- read.csv(url(trainingFileUrl), na.strings=c("NA","#DIV/0!",""))
+testingData <- read.csv(url(testingFileUrl), na.strings=c("NA","#DIV/0!",""))
+```
+Although we do some cleaning with the variables included in the data to make easier the analysis and prediction. 
+
+1. Remove columns with variables that don't provide information to the analysis.
+```{r}
+trainingData <- trainingData[,-c(1:7)]
+```
+2. Remove variables with near zero variance
+```{r}
+nzv <- nearZeroVar(trainingData)
+trainingData <- trainingData[, -nzv]
+```
+3. Remove columns with rows that has more than 80% of values missed
+```{r}
+trainingData <- trainingData[, colMeans(is.na(trainingData)) <= .60]
+```
+
+To finish the data processing we'll split the training data in two parts. We'll this two groups to make the cross validation of the model selected.
+
+```{r}
+inTrain <- createDataPartition( y = trainingData$classe, p=0.75, list = FALSE)
+subTraining <- trainingData[inTrain, ]
+subTesting <- trainingData[-inTrain, ]
+subTesting_nc <- subTesting[,-53] 
+```
+
+# Model Selection
+
+We'l try with two different models to predict the different exercises capture buy the different sensors. We'll try with Classification Tree and Random Forest. The reason to use these models are because Tree it's very easy to understand and Random Fores usually has the best accuracy in general. 
+
+## Clasification Tree
+
+As we can see this model only have a accuracy of 0.74 and a kappa of 0.67. That means that the model has an error of 0.26 rather high. 
+
+```{r}
+tree <- rpart(classe ~ ., data=subTraining, method="class")
+predictTree <- predict(tree, subTesting_nc, type = "class")
+rpart.plot(tree, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+confusionMatrix(predictTree, subTesting$classe)
+```
+
+## Random Forest
+
+With this model the results are much more accurate. In this case the Accuracy is of 0.9955 practically the cross validation provide a correct answer to all the data. 
+```{r}
+rf <- randomForest(classe ~ ., data = subTraining)
+predictRF <- predict(rf, subTesting_nc, type = "class")
+confusionMatrix(predictRF, subTesting$classe)
+```
+
+# Conclusions
+
+Looking at the results we can see that the model that uses the algorithm Random Forest provide better accuracy in the prediction of the exercise done. 
+
+```{r}
+results <- predict(rf, testingData, type = "class")
+results 
+```
+
+We then save the output to files according to instructions and post it to the submission page.
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(results)
+```
